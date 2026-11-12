@@ -97,6 +97,10 @@ const tc = createTradingChart(document.getElementById('chart')!, {
   attribution: true, // funnest-charts Apache-2.0 badge; leave this on
 });
 const chart = tc.chart;
+// Room under lows and above highs so the entry arrow and pill stay inside the price pane.
+const mainScale = (chart as unknown as { mainScale: { margins: { top: number; bottom: number } } }).mainScale;
+mainScale.margins.top = 0.24;
+mainScale.margins.bottom = 0.32;
 let bandId: string | null = null, flowId: string | null = null;
 function syncIndicators() {
   for (const c of chart.getIndicators()) if (c.type === 'ultraBand' || c.type === 'ultraFlow') chart.removeIndicator(c.id);
@@ -123,26 +127,89 @@ function tag(rc: ObjectRenderContext, s: string, x: number, y: number, color: st
   painter.roundRect(x - w / 2, yy, w, h, 3, C.bg);
   painter.text(s, x, yy + h / 2 + 0.5, color, 'center', 'middle');
 }
+/** Bold arrow. `tipY` is the point; the shaft runs away from the bar. */
+function entryArrow(ctx: CanvasRenderingContext2D, x: number, tipY: number, up: boolean, color: string, len: number) {
+  const head = len * 0.62, headW = len * 1.05, shaftW = Math.max(8, len * 0.44);
+  const neck = head * 0.7;
+  ctx.beginPath();
+  if (up) {
+    const tail = tipY + len;
+    ctx.moveTo(x, tipY);
+    ctx.lineTo(x + headW / 2, tipY + head);
+    ctx.lineTo(x + shaftW / 2, tipY + neck);
+    ctx.lineTo(x + shaftW / 2, tail);
+    ctx.lineTo(x - shaftW / 2, tail);
+    ctx.lineTo(x - shaftW / 2, tipY + neck);
+    ctx.lineTo(x - headW / 2, tipY + head);
+  } else {
+    const tail = tipY - len;
+    ctx.moveTo(x, tipY);
+    ctx.lineTo(x + headW / 2, tipY - head);
+    ctx.lineTo(x + shaftW / 2, tipY - neck);
+    ctx.lineTo(x + shaftW / 2, tail);
+    ctx.lineTo(x - shaftW / 2, tail);
+    ctx.lineTo(x - shaftW / 2, tipY - neck);
+    ctx.lineTo(x - headW / 2, tipY - head);
+  }
+  ctx.closePath();
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#0b0e14';
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+function entryPill(rc: ObjectRenderContext, text: string, x: number, anchorY: number, bg: string, above: boolean) {
+  const { painter } = rc;
+  painter.ctx.font = 'bold 13px -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", NanumGothic, sans-serif';
+  const w = painter.measure(text) + 18, h = 22, y = above ? anchorY - h : anchorY;
+  painter.roundRect(x - w / 2, y, w, h, h / 2, bg);
+  painter.text(text, x, y + h / 2 + 0.5, '#ffffff', 'center', 'middle');
+}
 
 const ultraOverlay: ChartOverlay = {
   render(rc) {
     const sim = view.sim; if (!sim) return;
     const { painter, coords } = rc, ctx = painter.ctx;
     const lastT = view.closed.at(-1)?.time ?? 0;
-    const sp = Math.abs(coords.timeToX(lastT) - coords.timeToX(lastT - 60000));
-    if (sp < 0.6) return;
+    const spRaw = Math.abs(coords.timeToX(lastT) - coords.timeToX(lastT - 60000));
+    const sp = Number.isFinite(spRaw) ? spRaw : 0;
     const S = Math.max(3.5, Math.min(7, sp * 0.7)), labels = ui.labels && sp >= 3, W = coords.plotWidth;
     const vis = (x: number) => x > -40 && x < W + 40;
     ctx.save(); ctx.font = '11px -apple-system, "Noto Sans KR", sans-serif';
     const hiLo = (t: number) => view.byTime.get(t);
 
-    // signal / block / conflict marks
+    // confirmed entries: big arrow always, pill unless bars are extremely compressed.
+    // Independent of the 청산라벨 toggle.
+    const drawEntry = (m: { time: number; side: number }) => {
+      const b = hiLo(m.time); if (!b) return;
+      const x = coords.timeToX(m.time); if (x < -24 || x > W + 24) return;
+      const long = m.side > 0;
+      const len = Math.max(32, Math.min(46, sp * 2.4));
+      const gap = 3;
+      if (long) {
+        const tip = coords.priceToY(b.low) + gap;
+        entryArrow(ctx, x, tip, true, C.long, len);
+        if (sp >= 3) entryPill(rc, '롱 진입', x, tip + len + 3, '#0e7c68', false);
+      } else {
+        const tip = coords.priceToY(b.high) - gap;
+        entryArrow(ctx, x, tip, false, C.short, len);
+        if (sp >= 3) entryPill(rc, '숏 진입', x, tip - len - 3, '#d32f2f', true);
+      }
+    };
+
+    if (sp < 0.6) {
+      for (const m of sim.marks) if (m.kind === 'signal') drawEntry(m);
+      ctx.restore();
+      return;
+    }
+
+    // block / conflict marks (confirmed signals are drawn last, on top)
     const drawMark = (m: { time: number; side: number; kind: Mark['kind'] | 'preview' | 'previewBlock'; block?: Block | null }) => {
       const b = hiLo(m.time); if (!b) return;
       const x = coords.timeToX(m.time); if (!vis(x)) return;
       const long = m.side > 0, y = long ? coords.priceToY(b.low) + S + 4 : coords.priceToY(b.high) - S - 4;
-      if (m.kind === 'signal') tri(ctx, x, y, S, long, long ? C.long : C.short);
-      else if (m.kind === 'preview') { ctx.globalAlpha = 0.45; tri(ctx, x, y, S, long, long ? C.long : C.short, long ? C.long : C.short); ctx.globalAlpha = 1; if (labels) tag(rc, '예비', x, long ? y + S + 2 : y - S - 2, long ? C.long : C.short, !long); }
+      if (m.kind === 'preview') { ctx.globalAlpha = 0.45; tri(ctx, x, y, S, long, long ? C.long : C.short, long ? C.long : C.short); ctx.globalAlpha = 1; if (labels) tag(rc, '예비', x, long ? y + S + 2 : y - S - 2, long ? C.long : C.short, !long); }
       else if (m.kind === 'block' || m.kind === 'previewBlock') {
         ctx.globalAlpha = m.kind === 'previewBlock' ? 0.45 : 0.8; tri(ctx, x, y, S * 0.8, long, null, C.block); ctx.globalAlpha = 1;
         if (labels && sp >= 5) tag(rc, `차단·${BLK[m.block!]}`, x, long ? y + S + 2 : y - S - 2, C.block, !long);
@@ -152,7 +219,7 @@ const ultraOverlay: ChartOverlay = {
         if (labels) tag(rc, '충돌', x, long ? y + S + 2 : y - S - 2, C.conflict, !long);
       }
     };
-    for (const m of sim.marks) if (m.kind === 'signal' || ui.blocks) drawMark(m);
+    for (const m of sim.marks) if (m.kind !== 'signal' && ui.blocks) drawMark(m);
 
     // trades: dashed entry→exit, entry dot, exit X + reason label
     const drawTrade = (t: Trade) => {
@@ -175,6 +242,8 @@ const ultraOverlay: ChartOverlay = {
       if (!view.prev.block) drawMark({ time: view.forming.time, side: view.prev.side, kind: 'preview' });
       else if (ui.blocks) drawMark({ time: view.forming.time, side: view.prev.side, kind: 'previewBlock', block: view.prev.block });
     }
+    ctx.font = '11px -apple-system, "Noto Sans KR", sans-serif';
+    for (const m of sim.marks) if (m.kind === 'signal') drawEntry(m);
     ctx.restore();
   },
 };
