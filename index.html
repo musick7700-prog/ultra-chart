@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#131722" />
+<meta name="color-scheme" content="dark" />
+<meta name="format-detection" content="telephone=no" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Ultra 차트" />
+<title>Ultra 차트</title>
+<link rel="manifest" href="%BASE_URL%manifest.json" />
+<link rel="icon" href="%BASE_URL%favicon.png" sizes="32x32" type="image/png" />
+<link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
+<style>
+  html, body { margin: 0; height: 100%; background: #131722; color: #d1d4dc; color-scheme: dark; font-family: -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif; overscroll-behavior: none; touch-action: manipulation; }
+  #app { position: fixed; inset: 0; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  #chart { flex: 1; min-height: 0; }
+  .ux-bar { display: flex; gap: 6px; align-items: center; padding: 6px 8px; overflow-x: auto; white-space: nowrap; font-size: 12px; border-bottom: 1px solid #2a2e39; scrollbar-width: none; }
+  .ux-bar::-webkit-scrollbar { display: none; }
+  .ux-bar select, .ux-chip { background: #1e222d; color: #d1d4dc; border: 1px solid #363a45; border-radius: 6px; padding: 5px 8px; font-size: 12px; }
+  @media (max-width: 640px) {
+    .ux-bar select, .ux-chip { padding: 8px 10px; }
+  }
+  .ux-chip { cursor: pointer; user-select: none; }
+  .ux-chip.on { background: #2962ff22; border-color: #2962ff; color: #fff; }
+  .ux-stats { display: inline-flex; gap: 10px; align-items: center; background: #1e222d; border: 1px solid #363a45; border-radius: 6px; padding: 4px 8px; }
+  .ux-stats b { color: #fff; font-weight: 600; }
+  .pos { color: #26a69a; } .neg { color: #ef5350; } .mut { color: #787b86; }
+  .ux-status { margin-left: auto; padding-left: 8px; }
+  .ux-banner { background: #3d2f00; color: #ffd166; font-size: 12px; line-height: 1.45; padding: 6px 8px; display: none; }
+  .ux-banner.bad { background: #3d1515; color: #ff8a80; }
+</style>
+</head>
+<body>
+<div id="app"><div id="chart"></div></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

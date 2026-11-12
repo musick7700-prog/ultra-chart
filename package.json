@@ -1,0 +1,1 @@
+{"name":"ultra-chart","private":true,"type":"module","scripts":{"build":"vite build","parity":"node --experimental-strip-types tools/parity.ts"},"dependencies":{"@funnest/charts":"^0.6.21","@funnest/charts-ui":"^0.6.21"},"devDependencies":{"typescript":"^7.0.2","vite":"^8.3.8"}}

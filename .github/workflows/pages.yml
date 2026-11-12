@@ -1,0 +1,100 @@
+# Build the static chart and publish it.
+# GitHub's configure-pages enablement cannot turn Pages on with the default
+# GITHUB_TOKEN (it needs a separate admin token). This workflow still tries
+# the official Pages deploy, and always pushes dist to the gh-pages branch
+# so the site can be served after one settings change:
+#   Settings → Pages → Source: Deploy from a branch → gh-pages → / (root)
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Try to enable and configure Pages
+        id: configure
+        continue-on-error: true
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+      - name: Deploy to GitHub Pages
+        id: deployment
+        if: steps.configure.outcome == 'success'
+        uses: actions/deploy-pages@v5
+      - name: Report Pages source
+        if: always()
+        run: |
+          if [ "${{ steps.deployment.outcome }}" = "success" ]; then
+            echo "GitHub Actions Pages deploy succeeded. Source can stay **GitHub Actions**." >> "$GITHUB_STEP_SUMMARY"
+            echo "URL: ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Actions Pages deploy did not complete. configure-pages enablement needs a token other than GITHUB_TOKEN, so a new repository stays unpublished until a person picks a source." >> "$GITHUB_STEP_SUMMARY"
+            echo "Use **Settings → Pages → Build and deployment → Source: Deploy from a branch → Branch: gh-pages → Folder: / (root) → Save**." >> "$GITHUB_STEP_SUMMARY"
+            echo "The gh-pages job publishes the built site for that setting. URL: https://musick7700-prog.github.io/ultra-chart/" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # Always publish the built site to gh-pages. This is what to select when the
+  # workflow token cannot enable Pages (the usual case on a fresh repository).
+  gh-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Publish gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          force_orphan: true
+          enable_jekyll: false
+          commit_message: "Deploy Ultra 차트"
