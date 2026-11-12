@@ -24,6 +24,10 @@
   @media (max-width: 640px) {
     .ux-bar select, .ux-chip { padding: 8px 10px; }
   }
+  .ux-seg { display: inline-flex; flex: none; position: sticky; left: 0; z-index: 2; background: #131722; border: 1px solid #363a45; border-radius: 8px; overflow: hidden; }
+  .ux-seg button { appearance: none; background: transparent; color: #d1d4dc; border: 0; margin: 0; padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .ux-seg button + button { box-shadow: inset 1px 0 0 #363a45; }
+  .ux-seg button.on { background: #2962ff; color: #fff; }
   .ux-chip { cursor: pointer; user-select: none; }
   .ux-chip.on { background: #2962ff22; border-color: #2962ff; color: #fff; }
   .ux-stats { display: inline-flex; gap: 10px; align-items: center; background: #1e222d; border: 1px solid #363a45; border-radius: 6px; padding: 4px 8px; }

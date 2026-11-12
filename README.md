@@ -1,6 +1,6 @@
 # Ultra 차트
 
-바이낸스 USDⓈ-M **BTCUSDT 무기한** 1분봉을 브라우저에서 보는 정적 차트입니다. 한국어 UI이고, 아이폰 홈 화면에 추가하면 **Ultra 차트**라는 이름으로 앱처럼 열립니다.
+바이낸스 USDⓈ-M **BTCUSDT · ETHUSDT 무기한** 1분봉을 브라우저에서 보는 정적 차트입니다. 위쪽 BTC/ETH 전환은 마지막 선택을 기억하고, `?symbol=ETHUSDT` 로도 열 수 있습니다. 한국어 UI이고, 아이폰 홈 화면에 추가하면 **Ultra 차트**라는 이름으로 앱처럼 열립니다.
 
 표시 전용입니다. API 키가 없고, 주문을 넣지 않으며, 거래소 계정에 로그인하지 않습니다. 화면에 나오는 매매와 손익은 받아 온 봉으로 계산한 종이 매매입니다.
 
@@ -8,11 +8,11 @@
 
 ## 시세
 
-1. 브라우저가 먼저 `https://fapi.binance.com/fapi/v1/klines` 에서 BTCUSDT 무기한 1분봉을 받습니다. 응답이 거절되면 `https://fapi1.binance.com` 을 같은 방식으로 시도합니다. 봉에는 테이커 매수 수량이 들어 있습니다.
+1. 브라우저가 먼저 `https://fapi.binance.com/fapi/v1/klines` 에서 선택한 종목(BTCUSDT 또는 ETHUSDT)의 무기한 1분봉을 받습니다. 응답이 거절되면 `https://fapi1.binance.com` 을 같은 방식으로 시도합니다. 봉에는 테이커 매수 수량이 들어 있습니다.
 2. 지역 제한이나 CORS로 둘 다 실패하면, 같은 무기한 1분봉 공개 파일인 [data.binance.vision](https://data.binance.vision) 일별 zip으로 넘어갑니다. 이 파일도 테이커 매수 수량을 포함합니다. 보통 다음 날 생성되므로 오늘 구간은 비어 있을 수 있고, 그때는 화면 위 안내 배너가 이유를 알려 줍니다.
 3. 그것까지 실패하면 같은 출처의 `/api/klines` 를 한 번만 더 시도합니다. GitHub Pages에는 이 경로가 없어서 그냥 넘어갑니다.
 4. 모두 실패하면 차트를 비운 채 한국어 오류 배너를 냅니다.
-5. 실시간 봉은 `wss://fstream.binance.com` 의 `btcusdt@kline_1m` 입니다.
+5. 실시간 봉은 `wss://fstream.binance.com` 의 `btcusdt@kline_1m` 또는 `ethusdt@kline_1m` 입니다. 종목을 바꾸면 이전 소켓과 봉은 버리고 새 종목만 남깁니다.
 
 ## 페이지 배포
 

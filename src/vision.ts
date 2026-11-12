@@ -1,10 +1,9 @@
-// Public Binance USD-M kline files. Same BTCUSDT perpetual 1m rows as fapi /klines,
+// Public Binance USD-M kline files. Same perpetual 1m rows as fapi /klines,
 // including taker-buy base volume, and the bucket sends Access-Control-Allow-Origin: *.
 // Daily files are published the next day, so "today" is usually missing.
 
 type Row = [number, string, string, string, string, string, number, string, number, string, string, string];
 
-const VISION = 'https://data.binance.vision/data/futures/um/daily/klines/BTCUSDT/1m';
 const EARLIEST = '2019-09-01';
 const cache = new Map<string, Promise<Row[] | null>>();
 
@@ -55,30 +54,31 @@ function parseVisionCsv(text: string): Row[] {
   return rows;
 }
 
-async function fetchDay(stamp: string): Promise<Row[] | null> {
-  const url = `${VISION}/BTCUSDT-1m-${stamp}.zip`;
+async function fetchDay(symbol: string, stamp: string): Promise<Row[] | null> {
+  const url = `https://data.binance.vision/data/futures/um/daily/klines/${symbol}/1m/${symbol}-1m-${stamp}.zip`;
   const r = await fetch(url, { signal: AbortSignal.timeout(20_000) });
   if (r.status === 404) return null;
-  if (!r.ok) throw new Error(`vision ${stamp} ${r.status}`);
+  if (!r.ok) throw new Error(`vision ${symbol} ${stamp} ${r.status}`);
   const text = new TextDecoder().decode(await unzipOne(new Uint8Array(await r.arrayBuffer())));
   const rows = parseVisionCsv(text);
-  if (!rows.length) throw new Error(`vision ${stamp} empty`);
+  if (!rows.length) throw new Error(`vision ${symbol} ${stamp} empty`);
   return rows;
 }
 
-function loadDay(stamp: string): Promise<Row[] | null> {
-  const hit = cache.get(stamp);
+function loadDay(symbol: string, stamp: string): Promise<Row[] | null> {
+  const key = `${symbol}:${stamp}`;
+  const hit = cache.get(key);
   if (hit) return hit;
-  const pending = fetchDay(stamp).catch((err) => {
-    cache.delete(stamp);
+  const pending = fetchDay(symbol, stamp).catch((err) => {
+    cache.delete(key);
     throw err;
   });
-  cache.set(stamp, pending);
+  cache.set(key, pending);
   return pending;
 }
 
 /** Up to `limit` klines with open time <= endTime, oldest first. Throws if no file could be read. */
-export async function visionKlines(endTime: number, limit: number): Promise<Row[]> {
+export async function visionKlines(symbol: string, endTime: number, limit: number): Promise<Row[]> {
   const picked: Row[] = [];
   let stamp = dayStamp(endTime);
   let misses = 0;
@@ -86,7 +86,7 @@ export async function visionKlines(endTime: number, limit: number): Promise<Row[
   while (picked.length < limit && stamp >= EARLIEST && misses < 10) {
     let day: Row[] | null;
     try {
-      day = await loadDay(stamp);
+      day = await loadDay(symbol, stamp);
     } catch (err) {
       if (picked.length) break;
       throw err;
@@ -102,7 +102,7 @@ export async function visionKlines(endTime: number, limit: number): Promise<Row[
     }
     stamp = prevDay(stamp);
   }
-  if (!saw) throw new Error('data.binance.vision에 BTCUSDT 1분봉이 없습니다');
+  if (!saw) throw new Error(`data.binance.vision에 ${symbol} 1분봉이 없습니다`);
   picked.reverse();
   return picked;
 }

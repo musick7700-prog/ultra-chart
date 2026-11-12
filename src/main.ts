@@ -1,22 +1,26 @@
 import { createTradingChart } from '@funnest/charts-ui';
 import type { Bar, ChartOverlay, IndicatorDefinition, IndicatorOutput, ObjectRenderContext } from '@funnest/charts';
-import { UltraFeed, type Stored } from './feed';
+import { UltraFeed, parseSymbol, SYMBOLS, type Stored, type SymbolId } from './feed';
 import { BAL0, FLOW_N, FLOW_TH, PERIOD, PRESETS, features, preview, segments, simulate, type Block, type Features, type KBar, type Mark, type Preset, type SimResult, type Trade } from './engine';
 
 // ---------- settings ----------
 const LS = 'ultra-chart:v1';
 const saved = (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })();
+const urlSymbol = parseSymbol(new URLSearchParams(location.search).get('symbol'));
 const ui = {
   preset: (saved.preset as string) || 'A',
   band: saved.band ?? true, preview: saved.preview ?? true, blocks: saved.blocks ?? true, labels: saved.labels ?? true, flow: saved.flow ?? true,
+  symbol: (urlSymbol ?? parseSymbol(saved.symbol) ?? 'BTCUSDT') as SymbolId,
 };
 const persist = () => localStorage.setItem(LS, JSON.stringify(ui));
+if (urlSymbol) persist();
+document.title = ui.symbol === 'ETHUSDT' ? 'Ultra 차트 · ETH' : 'Ultra 차트';
 const preset = (): Preset => PRESETS.find((p) => p.id === ui.preset) ?? PRESETS[1];
 
 const C = { long: '#26a69a', short: '#ef5350', block: '#9598a1', conflict: '#ff9800', win: '#26a69a', loss: '#ef5350', text: '#d1d4dc', bg: 'rgba(19,23,34,0.85)' };
 
 // ---------- engine state ----------
-const feed = new UltraFeed();
+const feed = new UltraFeed(ui.symbol);
 interface View { sim: SimResult | null; closed: Stored[]; forming: Stored | null; byTime: Map<number, Stored>; prev: ReturnType<typeof preview> | null; features: Features | null }
 const view: View = { sim: null, closed: [], forming: null, byTime: new Map(), prev: null, features: null };
 
@@ -91,7 +95,7 @@ const flowDef: IndicatorDefinition = {
 const app = document.getElementById('app')!;
 const narrow = window.innerWidth < 640;
 const tc = createTradingChart(document.getElementById('chart')!, {
-  datafeed: feed, symbol: 'BTCUSDT', resolution: '1', favoriteIntervals: ['1'], intervalGroups: [{ id: 'minutes', intervals: ['1'] }],
+  datafeed: feed, symbol: ui.symbol, resolution: '1', favoriteIntervals: ['1'], intervalGroups: [{ id: 'minutes', intervals: ['1'] }],
   locale: 'ko', colorScheme: 'dark', direction: 'global', displayTimezone: 'Asia/Seoul', drawingToolbar: !narrow,
   historyBatchSize: 3000, volume: false, indicatorDefinitions: [bandDef, flowDef], storageKey: 'ultra-chart-fc',
   attribution: true, // funnest-charts Apache-2.0 badge; leave this on
@@ -252,6 +256,37 @@ const overlay = chart.addOverlay(ultraOverlay);
 // ---------- controls + stats ----------
 const bar = document.createElement('div'); bar.className = 'ux-bar';
 const banner = document.createElement('div'); banner.className = 'ux-banner';
+const seg = document.createElement('div'); seg.className = 'ux-seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', '종목');
+const symBtns = {} as Record<SymbolId, HTMLButtonElement>;
+function paintSymbol() {
+  for (const id of Object.keys(symBtns) as SymbolId[]) symBtns[id].classList.toggle('on', id === ui.symbol);
+  for (const id of Object.keys(symBtns) as SymbolId[]) symBtns[id].setAttribute('aria-pressed', id === ui.symbol ? 'true' : 'false');
+}
+async function selectSymbol(id: SymbolId) {
+  if (id === ui.symbol && feed.symbol === id) return;
+  ui.symbol = id;
+  persist();
+  const url = new URL(location.href);
+  url.searchParams.set('symbol', id);
+  history.replaceState(null, '', url);
+  document.title = id === 'ETHUSDT' ? 'Ultra 차트 · ETH' : 'Ultra 차트';
+  paintSymbol();
+  view.sim = null; view.closed = []; view.forming = null; view.byTime = new Map(); view.prev = null; view.features = null;
+  needFull = true;
+  overlay?.redraw();
+  renderStats();
+  await chart.setSymbol(id, '1');
+}
+for (const id of ['BTCUSDT', 'ETHUSDT'] as const) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.textContent = SYMBOLS[id].label;
+  b.onclick = () => { void selectSymbol(id); };
+  symBtns[id] = b;
+  seg.appendChild(b);
+}
+paintSymbol();
+bar.appendChild(seg);
 const sel = document.createElement('select');
 for (const p of PRESETS) { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; sel.appendChild(o); }
 sel.value = preset().id;
@@ -285,7 +320,7 @@ function renderStats() {
   if (!s) { stats.textContent = '불러오는 중…'; return; }
   const eq = s.cash + (s.open ? s.open.margin + s.open.pnl : 0), ret = eq / BAL0 - 1, wr = s.n ? s.wins / s.n : 0;
   const first = view.closed[0]?.time;
-  stats.innerHTML = `<span class="mut">${p.name} · $600 · 4%×50</span> 거래 <b>${s.n}</b> 승률 <b>${(wr * 100).toFixed(1)}%</b> 수익 <b class="${ret >= 0 ? 'pos' : 'neg'}">${pct(ret)}</b> <span class="mut">MDD ${(s.maxDD * 100).toFixed(1)}%</span>` +
+  stats.innerHTML = `<span class="mut">${SYMBOLS[feed.symbol].label} · ${p.name} · $600 · 4%×50</span> 거래 <b>${s.n}</b> 승률 <b>${(wr * 100).toFixed(1)}%</b> 수익 <b class="${ret >= 0 ? 'pos' : 'neg'}">${pct(ret)}</b> <span class="mut">MDD ${(s.maxDD * 100).toFixed(1)}%</span>` +
     (s.open ? ` <span class="${s.open.ret >= 0 ? 'pos' : 'neg'}">보유 ${s.open.side > 0 ? '롱' : '숏'} ${pct(s.open.ret)}</span>` : '') +
     (first ? ` <span class="mut">${fmtT(first)}~ (${view.closed.length}봉)</span>` : '');
   const ago = feed.lastMsg ? Math.round((Date.now() - feed.lastMsg) / 1000) : null;
@@ -296,7 +331,7 @@ function renderStats() {
   banner.classList.remove('bad');
   if (feed.mode === 'vision') {
     banner.style.display = 'block';
-    banner.textContent = `바이낸스 선물 REST에 연결하지 못해, 같은 BTCUSDT 무기한 1분봉(테이커 매수량 포함)을 공개 파일(data.binance.vision)로 표시합니다. 파일은 보통 다음 날 올라와 오늘 구간이 비어 있을 수 있습니다.${gaps ? ` 공백 ${gaps}곳 뒤 지표는 다시 워밍업됩니다.` : ''} 실시간 봉은 WebSocket이 연결되면 이어집니다.`;
+    banner.textContent = `바이낸스 선물 REST에 연결하지 못해, 같은 ${feed.symbol} 무기한 1분봉(테이커 매수량 포함)을 공개 파일(data.binance.vision)로 표시합니다. 파일은 보통 다음 날 올라와 오늘 구간이 비어 있을 수 있습니다.${gaps ? ` 공백 ${gaps}곳 뒤 지표는 다시 워밍업됩니다.` : ''} 실시간 봉은 WebSocket이 연결되면 이어집니다.`;
   } else if (feed.mode === 'server') {
     banner.style.display = 'block';
     banner.textContent = '바이낸스 REST와 공개 데이터 파일을 받지 못해 /api/klines 응답으로 표시합니다.';
@@ -312,6 +347,7 @@ window.addEventListener('resize', () => overlay.redraw());
 (window as unknown as Record<string, unknown>).__ultra = {
   feed, view, PRESETS, chart,
   setPreset: (id: string) => { sel.value = id; sel.onchange?.(new Event("change")); },
+  setSymbol: (id: string) => selectSymbol(parseSymbol(id) ?? 'BTCUSDT'),
   dumpBars: () => feed.snapshot().closed.map((b) => [b.time, b.open, b.high, b.low, b.close, b.volume, b.takerBuy]),
   trades: (id = 'A') => { const p = PRESETS.find((x) => x.id === id)!; const b = feed.snapshot().closed; return simulate(p, b, fullFeatures(b), true).trades; },
 };
